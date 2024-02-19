@@ -1,0 +1,158 @@
+org: farragtmostafa
+app: first-app
+service: aws-node-express-api-project
+frameworkVersion: '3'
+
+custom:
+  tableName: orders-table-${sls:stage}
+  ordersBucketName: sls-tut-arabic-orders-bucket-${self:provider.stage}
+
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, 'dev'}
+  environment:
+    ORDERS_TABLE: ${self:custom.tableName}
+    ordersBucketName: ${self:custom.ordersBucketName}
+
+
+  iam:
+   role:
+     statements:
+        - Effect: Allow
+          Action:
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:BatchWriteItem
+          Resource:
+              - Fn::GetAtt: [ OrdersTable, Arn ]
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+          Resource:
+            Fn::Join:
+              - ''
+              - - 'arn:aws:s3:::'
+                - 'Ref': 'OrdersBucket'
+                - '/*'
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminInitiateAuth
+            - cognito-idp:AdminCreateUser
+            - cognito-idp:AdminSetUserPassword
+          Resource: "*"
+
+
+
+functions:
+  api:
+    handler: index.handler
+    url:
+      cors: true
+    events:
+      - httpApi: '*'
+  getProducts:
+    handler: index.handler
+    events:
+      - http:
+          path: products
+          method: get
+          cors: true
+  Users:
+    handler: src/lambda/user.handler
+    events:
+      - http:
+          path: /all
+          method: get
+          cors: true
+  getOrder:
+    handler: src/lambda/get-order.handler
+    events:
+      - http:
+          path: /orders/{id}
+          method: GET
+          cors: true
+  getOrders:
+    handler: src/lambda/get-orders.handler
+    events:
+      - http:
+          path: /orders/all
+          method: GET
+          cors: true
+  createOrder:
+    handler: src/lambda/create-order.handler
+    events:
+      - http:
+          path: /orders/create
+          method: POST
+          cors: true
+  updateOrder:
+    handler: src/lambda/update-order.handler
+    events:
+      - http:
+          path: /orders/{id}
+          method: PATCH
+          cors: true
+  removeOrder:
+    handler: src/lambda/remove-order.handler
+    events:
+      - http:
+          path: /orders/{id}
+          method: DELETE
+          cors: true
+  orderProcessor:
+    handler: src/lambda/order-processor.handler
+    events:
+      - s3:
+          bucket: ${self:custom.ordersBucketName}
+          event: s3:ObjectCreated:*
+          existing: true
+  writeBatchOrders:
+    handler: src/lambda/write-batch-orders.handler
+    events:
+      - http:
+          path: /batch
+          method: POST
+          cors: true
+  getBatchOrders:
+    handler: src/lambda/get-batch-orders.handler
+    events:
+      - http:
+          path: /batch
+          method: GET
+          cors: true
+
+
+
+
+
+
+
+
+
+resources:
+  Resources:
+      OrdersTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+          AttributeDefinitions:
+            - AttributeName: orderId
+              AttributeType: S
+          KeySchema:
+            - AttributeName: orderId
+              KeyType: HASH
+          BillingMode: PAY_PER_REQUEST
+          TableName: ${self:custom.tableName}
+      OrdersBucket:
+        Type: AWS::S3::Bucket
+        Properties:
+          BucketName: ${self:custom.ordersBucketName}
+
+
+
+
